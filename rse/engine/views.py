@@ -54,7 +54,7 @@ def original_image_index(all_indx):
         for j in i:
             if j not in u_list:
                 u_list.append(j)
-    unique_list.append(u_list)
+        unique_list.append(u_list)
     nf = np.concatenate(unique_list)
     return nf
 
