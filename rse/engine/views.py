@@ -109,8 +109,6 @@ def show_image_url(request, name):
         image = f.read()
     return HttpResponse(image, content_type='image/jpeg')
 
-load()
-
 class SearchImage(generics.CreateAPIView):
     serializer_class = SearchSerializers
 
