@@ -1,86 +1,118 @@
-from skimage import io
+from skimage import io, feature
+from skimage import exposure
 from skimage.feature import SIFT
 import numpy as np
 from collections import Counter
 import nmslib
 from collections import Counter
 import pickle
-import matplotlib.pyplot as plt
-import cv2
+import time
+from functools import partial
+import multiprocessing
+import warnings
+warnings.filterwarnings("ignore")
 
-index = nmslib.init(method='hnsw', space='l2')
-index.loadIndex(r"D:\RealCoderZ\ReverseImageSearch\PythonSIFT\index_9.bin")
+def load():
+    index = nmslib.init(method='hnsw', space='l2')
+    index.loadIndex(r"D:\RealCoderZ\ReverseImageSearch\no desc\new_all_test_index.bin")
+    # index.loadIndexFromMemory(index_file = r"D:\RealCoderZ\ReverseImageSearch\PythonSIFT\index_9.bin", load_data = False)
 
-with open(r"D:\RealCoderZ\ReverseImageSearch\desc_metadata9.pkl", 'rb') as f:
-    img_name, original_indices, matrix = pickle.load(f)
+    # with open(r"D:\RealCoderZ\ReverseImageSearch\desc_metadata9.pkl", 'rb') as f:
+    #     img_name, original_indices, matrix = pickle.load(f)
 
-detector_extractor = SIFT()
+    with open(r"D:\RealCoderZ\ReverseImageSearch\no desc\descriptor_new_all.pkl", 'rb') as f:
+        descriptor = pickle.load(f)
 
-print('----------------Index with metadata loaded---------------')
+    detector_extractor = SIFT()
 
-image = io.imread(r"D:\RealCoderZ\ReverseImageSearch\rse\static\images9\img_1293.jpg", as_gray = True) 
-detector_extractor.detect_and_extract(image)
-inp_img_desc = detector_extractor.descriptors
+    print('----------------Index with metadata loaded---------------')
 
-all_indx = []
-for i in inp_img_desc:
-    query = i    
-    indices, distances = index.knnQuery(query, k=5)
-    all_indx.append(indices)
+    desc = list()
+    img_name = list()
 
-original_most = []
-for j in all_indx:
-    og_most = []
-    for i in j:
-        og_most.append(original_indices[i])
-    original_most.append(og_most)
+    for k, v in descriptor.items():
+        img_name.append(k)
+        desc.append(v)
 
-unique_list = []
-for i in original_most:
-    u_list = []
-    for j in i:
-        if j not in u_list:
-            u_list.append(j)
-            
-    unique_list.append(u_list)
+    original_indices = [i for i in range(len(desc)) for j in range(len(desc[i]))]
 
-nf = np.concatenate(unique_list)
+    return index, detector_extractor, desc, img_name, original_indices
+
+def desc_cal(detector_extractor):
+    image = io.imread(r"C:\Users\soura\Desktop\test2.jpg", as_gray = True) 
+    try:
+        detector_extractor.detect_and_extract(image)
+        inp_img_desc = detector_extractor.descriptors
+        
+    except Exception as e:
+        if "SIFT found no features" in str(e):
+            image = exposure.equalize_hist(image)
+            detector_extractor.detect_and_extract(image)
+            inp_img_desc = detector_extractor.descriptors
+    
+    return inp_img_desc
+
+def nearestneighbor(index, inp_img_desc):
+    all_indx = []
+    for i in inp_img_desc:
+        query = i    
+        indices, _ = index.knnQuery(query, k=5)
+        all_indx.append(indices)
+    
+    return all_indx
+
+def original_image_index(all_indx):
+    original_most = []
+    for j in all_indx:
+        og_most = []
+        for i in j:
+            og_most.append(original_indices[i])
+        original_most.append(og_most)
+
+    unique_list = []
+    for i in original_most:
+        u_list = []
+        for j in i:
+            if j not in u_list:
+                u_list.append(j)
+        unique_list.append(u_list)
+    nf = np.concatenate(unique_list)
+    return nf
 
 def most_repeated_value(lst):
     count_dict = Counter(lst)
     most_repeated = sorted(count_dict.items(), key=lambda x: x[1], reverse = True)
     return most_repeated
 
-mr = most_repeated_value(nf)
-found = [img_name[i[0]] for i in mr[:5]]
+def dis_calci(inp_img_desc, d):
+    if len(feature.match_descriptors(d[1], inp_img_desc, max_ratio = 0.6, cross_check = True)) > 5:
+        return d[0]
 
-print(found)
+if __name__ == '__main__':
 
-# a = cv2.imread(r"D:\RealCoderZ\ReverseImageSearch\rse\static\images9\img_1316.jpg")
-# b = cv2.imread(r"D:\RealCoderZ\ReverseImageSearch\rse\static\images9\img_3219.jpg")
+    index, detector_extractor, desc, img_name, original_indices = load()
 
-# Verti = np.concatenate((a, b), axis=1)
+    start = time.time()
 
-# cv2.imshow('VERTICAL', Verti)
+    inp_img_desc = desc_cal(detector_extractor)
+    all_indx = nearestneighbor(index, inp_img_desc)
+    nf = original_image_index(all_indx)
 
-# cv2.waitKey(0)
-# io.imshow(r"D:\RealCoderZ\ReverseImageSearch\rse\static\images9\img_1316.jpg")
-# plt.show()
-# io.imshow(r"D:\RealCoderZ\ReverseImageSearch\rse\static\images9\img_3219.jpg")
-# plt.show()
-#cluster 9 - 1306, 3723.jpg, img_1316, img_1336, img_2356, img_2362, img_3219, 1614, 2388, 1454, 5061, 2403, 2415, 2788, 2605, 2442, 2644, 1293
+    mr = most_repeated_value(nf)
 
+    pool = multiprocessing.Pool(processes=4)
+    inp = partial(dis_calci, inp_img_desc)
+    results = pool.map(inp, [(img_name[i[0]], desc[i[0]]) for i in mr[:10]])
 
-# import os
-# import pickle
-# import shutil
+    results = list(set(results))
 
-# images = ['img_1306.jpg', 'img_1316.jpg', 'img_3723.jpg', 'img_1336.jpg', 'img_2356.jpg', 'img_2362.jpg', 'img_3219.jpg', 'img_1614.jpg', 'img_2388.jpg', 'img_1454.jpg', 'img_5061.jpg', 'img_2403.jpg', 'img_2415.jpg', 'img_2788.jpg', 'img_2605.jpg', 'img_2442.jpg', 'img_2644.jpg', 'img_1293.jpg']
+    if None in results:
+        results.remove(None)
 
-# with open(r"D:\RealCoderZ\ReverseImageSearch\desc_metadata9.pkl", 'rb') as f:
-#     img_name, orginal_indices, desc = pickle.load(f)
+    print(time.time() - start)
 
-# os.makedirs("D:/RealCoderZ/ReverseImageSearch/test", exist_ok = True)
-
-# for img in images:
-#     shutil.copy(f"D:/RealCoderZ/ReverseImageSearch/dataAllimages/{img}", f"D:/RealCoderZ/ReverseImageSearch/test/{img}")
+    if len(results) != 0:
+        print(results)
+    else:
+        print('No match found...')
+        print(f"Similar results: ", [img_name[i[0]] for i in mr[:3]])
