@@ -15,10 +15,6 @@ warnings.filterwarnings("ignore")
 def load():
     index = nmslib.init(method='hnsw', space='l2')
     index.loadIndex(r"D:\RealCoderZ\ReverseImageSearch\no desc\new_all_test_index.bin")
-    # index.loadIndexFromMemory(index_file = r"D:\RealCoderZ\ReverseImageSearch\PythonSIFT\index_9.bin", load_data = False)
-
-    # with open(r"D:\RealCoderZ\ReverseImageSearch\desc_metadata9.pkl", 'rb') as f:
-    #     img_name, original_indices, matrix = pickle.load(f)
 
     with open(r"D:\RealCoderZ\ReverseImageSearch\no desc\descriptor_new_all.pkl", 'rb') as f:
         descriptor = pickle.load(f)

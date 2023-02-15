@@ -1,11 +1,10 @@
-from django.shortcuts import render, HttpResponse
+from django.shortcuts import HttpResponse
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import generics
 from .serializers import SearchSerializers
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
-from PIL import Image
 from skimage import io, feature, exposure
 from skimage.feature import SIFT
 import numpy as np
@@ -14,22 +13,13 @@ import nmslib
 from collections import Counter
 import pickle
 import time
-from functools import partial
-import multiprocessing
-import warnings
-warnings.filterwarnings("ignore")
-
 
 def load():
     global index, detector_extractor, desc, img_name, original_indices
     index = nmslib.init(method='hnsw', space='l2')
-    index.loadIndex(r"D:\descriptors\new_all_test_index.bin")
-    # index.loadIndexFromMemory(index_file = r"D:\RealCoderZ\ReverseImageSearch\PythonSIFT\index_9.bin", load_data = False)
+    index.loadIndex(r"D:\RealCoderZ\ReverseImageSearch\no desc\new_all_test_index.bin")
 
-    # with open(r"D:\RealCoderZ\ReverseImageSearch\desc_metadata9.pkl", 'rb') as f:
-    #     img_name, original_indices, matrix = pickle.load(f)
-
-    with open(r"D:\descriptors\descriptor_new_all.pkl", 'rb') as f:
+    with open(r"D:\RealCoderZ\ReverseImageSearch\no desc\descriptor_new_all.pkl", 'rb') as f:
         descriptor = pickle.load(f)
 
     detector_extractor = SIFT()
@@ -91,10 +81,6 @@ def most_repeated_value(lst):
     most_repeated = sorted(count_dict.items(), key=lambda x: x[1], reverse = True)
     return most_repeated
 
-def dis_calci(inp_img_desc, d):
-    if len(feature.match_descriptors(d[1], inp_img_desc, max_ratio = 0.6, cross_check = True)) > 5:
-        return d[0]
-
 @api_view(['GET'])
 def apiOverview(request):
     api_urls = {
@@ -104,15 +90,20 @@ def apiOverview(request):
 
 @api_view(['GET'])
 def show_image_url(request, name):
-    image_url = f'static/demo/{name}'
+    image_url = f'D:/RealCoderZ/ReverseImageSearch/Cliqstock-backup/{name}'
     with open(image_url, 'rb') as f:
         image = f.read()
     return HttpResponse(image, content_type='image/jpeg')
+
+load()
 
 class SearchImage(generics.CreateAPIView):
     serializer_class = SearchSerializers
 
     def post(self, request):
+        
+        start = time.time()
+
         img_uploaded = request.FILES.get('image')
         default_storage.save('static/input/file.jpg', ContentFile(img_uploaded.read()))
 
@@ -121,28 +112,13 @@ class SearchImage(generics.CreateAPIView):
         inp_img_desc = desc_cal()
         all_indx = nearestneighbor(inp_img_desc)
         nf = original_image_index(all_indx)
-
         mr = most_repeated_value(nf)
-
-        pool = multiprocessing.Pool(processes=4)
-        inp = partial(dis_calci, inp_img_desc)
-        results = pool.map(inp, [(img_name[i[0]], desc[i[0]]) for i in mr[:10]])
-
-        results = list(set(results))
-
-        if None in results:
-            results.remove(None)
-
-        print(time.time() - start)
-
-        if len(results) != 0:
-            msg = "Images found"
-            found = [f"http://127.0.0.1:8000/engine/extract_img/{i}" for i in results]
-        else:
-            msg = "No exact result found. Here are some similar images"
-            found = [f"http://127.0.0.1:8000/engine/extract_img/{img_name[i[0]]}" for i in mr[:3]]
+        msg = "Found similar images..."
+        found = [f"http://127.0.0.1:8000/engine/extract_img/{img_name[i[0]]}" for i in mr[:3]]
 
         default_storage.delete('static/input/file.jpg')
+
+        print(time.time() - start)
 
         return Response(
             {
